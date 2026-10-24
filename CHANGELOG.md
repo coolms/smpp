@@ -27,6 +27,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   `ESME_RMSGQFUL`, doubling the pause when it repeats after one. A failed bind, the end of the stream, a framing error
   or a failed write ends the session: the connection closes and outstanding requests are reported lost.
 - Transport: TLS by default, verified against the host's name; plain TCP on request. PDU lengths are checked before a
-  body is read. Reads and writes both have deadlines. Socket waits go through `Transport\Waiter`.
+  body is read. Reads and writes both have deadlines. Socket waits go through `Transport\Waiter`: `IoPollWaiter`
+  (`Io\Poll`) by default, `StreamSelectWaiter` where wanted.
+- Runtime dependencies: `symfony/polyfill-io-poll` and `symfony/polyfill-time`, for `Io\Poll` and its `Time\Duration`
+  (both in PHP 8.6 core).
 - The bind password is `#[\SensitiveParameter]`: it reaches the wire and nowhere else, not a stack trace, a dump or
   the session's log.

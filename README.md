@@ -20,7 +20,8 @@ session healthy without a background process.
   text in its many spellings.
 - **Safe by default.** TLS verified against the host name unless you ask for plain TCP; PDU lengths checked before
   anything is read into memory; the bind password never appears in a trace, a dump or a log.
-- **Zero dependencies.** PHP 8.5 with `ext-mbstring`.
+- **Two polyfills, no framework.** PHP 8.5 with `ext-mbstring`, plus `symfony/polyfill-io-poll` and
+  `symfony/polyfill-time` (`Io\Poll` and `Time\Duration`, both in PHP 8.6 core), as coolms/imap takes them.
 
 ## Install
 

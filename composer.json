@@ -1,6 +1,6 @@
 {
     "name": "coolms/smpp",
-    "description": "An SMPP 3.4 client for PHP: binds, submit_sm and deliver_sm with a window of outstanding requests, GSM 03.38, Latin-1 and UCS-2, long messages by UDH or message_payload, and delivery receipts read the way real SMSCs write them. Zero dependencies.",
+    "description": "An SMPP 3.4 client for PHP: binds, submit_sm and deliver_sm with a window of outstanding requests, GSM 03.38, Latin-1 and UCS-2, long messages by UDH or message_payload, and delivery receipts read the way real SMSCs write them. Symfony polyfills only, no framework.",
     "type": "library",
     "license": "MIT",
     "keywords": ["smpp", "sms", "smsc", "esme", "gsm", "delivery-receipt"],
@@ -16,7 +16,9 @@
     },
     "require": {
         "php": "^8.5",
-        "ext-mbstring": "*"
+        "ext-mbstring": "*",
+        "symfony/polyfill-io-poll": "^1.43",
+        "symfony/polyfill-time": "^1.42"
     },
     "require-dev": {
         "phpunit/phpunit": "^12.5"

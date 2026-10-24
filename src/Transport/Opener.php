@@ -14,7 +14,7 @@ use const STREAM_CLIENT_CONNECT;
 final readonly class Opener
 {
     public function __construct(
-        private Waiter $waiter = new StreamSelectWaiter(),
+        private Waiter $waiter = new IoPollWaiter(),
         private Clock $clock = new MonotonicClock(),
         private int $maxPduLength = Connection::DEFAULT_MAX_LENGTH,
         private float $writeTimeout = 10.0,
