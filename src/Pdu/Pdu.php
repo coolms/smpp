@@ -20,8 +20,11 @@ final readonly class Pdu
 {
     public const int HEADER_LENGTH = 16;
 
-    /** A sequence number is 1 to 0x7FFFFFFF (section 3.2). */
+    /** The largest sequence number this library gives a request (section 3.2: 0x00000001 to 0x7FFFFFFF). */
     public const int MAX_SEQUENCE = 0x7FFFFFFF;
+
+    /** The largest a received PDU may carry: any 32-bit number, since an SMSC may number past the spec's range. */
+    public const int MAX_RECEIVED_SEQUENCE = 0xFFFFFFFF;
 
     public function __construct(
         public int $commandId,
@@ -29,8 +32,10 @@ final readonly class Pdu
         public int $sequence,
         public string $body = '',
     ) {
-        if ($sequence < 0 || $sequence > self::MAX_SEQUENCE) {
-            throw new MalformedPdu(sprintf('A sequence number is 0 to 0x%08X; %d is not.', self::MAX_SEQUENCE, $sequence));
+        // Any 32-bit number is read and echoed in the response: a receipt numbered past 0x7FFFFFFF by a lax SMSC
+        // is still a receipt. The requests this library makes stay in the spec's range (Session::sequence()).
+        if ($sequence < 0 || $sequence > self::MAX_RECEIVED_SEQUENCE) {
+            throw new MalformedPdu(sprintf('A sequence number is 0 to 0x%08X; %d is not.', self::MAX_RECEIVED_SEQUENCE, $sequence));
         }
     }
 
