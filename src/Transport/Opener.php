@@ -17,6 +17,7 @@ final readonly class Opener
         private Waiter $waiter = new StreamSelectWaiter(),
         private Clock $clock = new MonotonicClock(),
         private int $maxPduLength = Connection::DEFAULT_MAX_LENGTH,
+        private float $writeTimeout = 10.0,
     ) {
     }
 
@@ -28,6 +29,6 @@ final readonly class Opener
             throw new CouldNotOpen('Could not connect to ' . $endpoint->host . ':' . $endpoint->port . ': ' . ('' !== $message ? $message : 'error ' . $code) . '.');
         }
 
-        return new Connection($stream, $this->waiter, $this->clock, $this->maxPduLength);
+        return new Connection($stream, $this->waiter, $this->clock, $this->maxPduLength, $this->writeTimeout);
     }
 }

@@ -280,13 +280,18 @@ final class Session
     {
         $command = $pdu->command();
         if (null === $command) {
+            // A response is never answered (section 3.2), even one this library does not know.
+            if ($pdu->isResponse()) {
+                return;
+            }
             $this->write(new Pdu(CommandId::GenericNack->value, CommandStatus::InvalidCommandId->value, $pdu->sequence));
 
             return;
         }
         match ($command) {
             CommandId::SubmitSmResp => $this->complete($pdu->sequence, $pdu->status, CommandStatus::Ok->value === $pdu->status ? $this->messageId($pdu) : ''),
-            CommandId::GenericNack => $this->complete($pdu->sequence, $pdu->status),
+            // A generic_nack to our enquire_link still answers it: the link is alive.
+            CommandId::GenericNack => $this->enquireLink === $pdu->sequence ? $this->enquireLink = null : $this->complete($pdu->sequence, $pdu->status),
             CommandId::EnquireLinkResp => $this->enquireLink === $pdu->sequence ? $this->enquireLink = null : null,
             CommandId::EnquireLink => $this->write($pdu->respond()),
             CommandId::DeliverSm => $this->delivered($pdu, static fn (string $body): ShortMessage => ShortMessage::decode($body)),
@@ -329,7 +334,11 @@ final class Session
         try {
             $status = null === $this->onDeliver ? CommandStatus::Ok->value : ($this->onDeliver)($message, $receipt);
         } catch (Throwable $handlerFailed) {
-            $this->write($pdu->respond(CommandStatus::TemporaryAppError->value, $body));
+            try {
+                $this->write($pdu->respond(CommandStatus::TemporaryAppError->value, $body));
+            } catch (ConnectionClosed|TimedOut) {
+                // The session has ended; the handler's failure is still the one to report.
+            }
 
             throw $handlerFailed;
         }

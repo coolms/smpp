@@ -31,6 +31,8 @@ final class Connection
     /** The largest PDU read: a full submit_sm with a 64 KiB message_payload fits. */
     public const int DEFAULT_MAX_LENGTH = 70_000;
 
+    private const int CHUNK = 65536;
+
     private string $buffer = '';
 
     /** The peer has closed: what is buffered is still handed out, then the connection ends. */
@@ -110,7 +112,8 @@ final class Connection
 
     /**
      * Everything readable now, not one chunk: a TLS record can leave decrypted bytes inside PHP, where a select on
-     * the socket would not see them.
+     * the socket would not see them. Up to one largest PDU and a chunk, so a fast sender cannot grow the buffer
+     * without bound; read() takes from the buffer and calls again before it waits, so the rest is read then.
      */
     private function fill(): void
     {
@@ -120,8 +123,8 @@ final class Connection
         if (!is_resource($this->stream)) {
             throw new ConnectionClosed('The connection is closed.');
         }
-        while (true) {
-            $chunk = @fread($this->stream, 65536);
+        while (strlen($this->buffer) < $this->maxLength + self::CHUNK) {
+            $chunk = @fread($this->stream, self::CHUNK);
             if (false === $chunk || ('' === $chunk && feof($this->stream))) {
                 $this->ended = true;
 

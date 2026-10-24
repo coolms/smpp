@@ -26,17 +26,26 @@ use CoolMS\Smpp\SessionOptions;
 use CoolMS\Smpp\Tests\Support\FakeClock;
 use CoolMS\Smpp\Tests\Support\FakeSmsc;
 use CoolMS\Smpp\Transport\Connection;
+use CoolMS\Smpp\Transport\Endpoint;
+use CoolMS\Smpp\Transport\Opener;
+use CoolMS\Smpp\Transport\StreamSelectWaiter;
 use CoolMS\Smpp\Transport\Waiter;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use ReflectionProperty;
 use RuntimeException;
 
+use function fclose;
 use function fwrite;
 use function pack;
 use function str_repeat;
 use function stream_set_blocking;
+use function stream_socket_get_name;
 use function stream_socket_pair;
+use function stream_socket_server;
+use function strrpos;
+use function substr;
 
 use const STREAM_IPPROTO_IP;
 use const STREAM_PF_UNIX;
@@ -279,6 +288,86 @@ final class ReviewFixesTest extends TestCase
         };
         $this->expectException(TimedOut::class);
         new Connection($client, $waiter, $clock, writeTimeout: 5.0)->write(Pdu::request(CommandId::EnquireLink, 1));
+    }
+
+    #[Test]
+    public function aFastSenderCannotGrowTheReadBufferPastOnePduAndAChunk(): void
+    {
+        $pair = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
+        if (false === $pair) {
+            throw new RuntimeException('no socket pair');
+        }
+        [$client, $peer] = $pair;
+        stream_set_blocking($peer, false);
+        $pdus = str_repeat(Pdu::request(CommandId::EnquireLink, 1)->encode(), 4096);
+        $queued = 0;
+        while (($written = fwrite($peer, $pdus)) > 0) {
+            $queued += $written;
+        }
+        $connection = new Connection($client, new StreamSelectWaiter(), new FakeClock(), maxLength: 100);
+        self::assertNotNull($connection->read(0.0));
+
+        $buffered = strlen((string) new ReflectionProperty(Connection::class, 'buffer')->getValue($connection));
+        self::assertGreaterThan(100 + 2 * 65536, $queued, 'the peer queued more than the cap, or the case shows nothing');
+        self::assertLessThan(100 + 2 * 65536, $buffered);
+    }
+
+    #[Test]
+    public function theOpenerGivesItsConnectionsTheWriteTimeout(): void
+    {
+        $server = stream_socket_server('tcp://127.0.0.1:0');
+        if (false === $server) {
+            throw new RuntimeException('no local server');
+        }
+        $address = (string) stream_socket_get_name($server, false);
+        $port = (int) substr($address, (int) strrpos($address, ':') + 1);
+        $connection = new Opener(writeTimeout: 2.5)->open(new Endpoint('127.0.0.1', $port, tls: false));
+
+        self::assertSame(2.5, new ReflectionProperty(Connection::class, 'writeTimeout')->getValue($connection));
+        $connection->close();
+        fclose($server);
+    }
+
+    #[Test]
+    public function aGenericNackToOurEnquireLinkStillAnswersIt(): void
+    {
+        $session = $this->bound(new SessionOptions(enquireLinkInterval: 30.0, responseTimeout: 5.0));
+        $this->smsc->answerEnquireLink = false;
+        $session->poll(30.5);
+        $this->smsc->then(static fn (FakeSmsc $smsc) => $smsc->send(new Pdu(CommandId::GenericNack->value, CommandStatus::InvalidCommandId->value, $smsc->sent(CommandId::EnquireLink)[0]->sequence)));
+        $session->poll(10.0);
+
+        self::assertTrue($session->isBound());
+    }
+
+    #[Test]
+    public function aResponseWithAnUnknownIdIsNotAnswered(): void
+    {
+        $session = $this->bound();
+        $this->smsc->then(static fn (FakeSmsc $smsc) => $smsc->send(new Pdu(0x80000999, 0, 5)));
+        $session->poll(1.0);
+
+        self::assertSame([], $this->smsc->sent(CommandId::GenericNack));
+    }
+
+    #[Test]
+    public function aHandlerFailureIsReportedEvenWhenItsAnswerCannotBeSent(): void
+    {
+        $session = $this->bound();
+        $smsc = $this->smsc;
+        $session->onDeliver(static function () use ($smsc): int {
+            $smsc->hangUp();
+
+            throw new RuntimeException('handler broke');
+        });
+        $this->smsc->then(static fn (FakeSmsc $smsc) => $smsc->deliver(new ShortMessage('a', 'b', 'hello')));
+        try {
+            $session->poll(1.0);
+            self::fail('nothing was thrown');
+        } catch (RuntimeException $error) {
+            self::assertSame('handler broke', $error->getMessage());
+        }
+        self::assertFalse($session->isBound());
     }
 
     #[Test]
