@@ -11,7 +11,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - PDUs: the header and the bodies of bind (transmitter, receiver, transceiver), submit_sm, deliver_sm, data_sm,
   enquire_link, unbind and generic_nack, with typed command ids, statuses and TLV tags. Unknown command ids, statuses
-  and tags are kept as integers, so an SMSC's own codes are read rather than refused.
+  and tags are kept as integers, so an SMSC's own codes are read rather than refused. What an SMSC sends is read where
+  it bends the spec: a sequence number past 0x7FFFFFFF (echoed in the response), or a C-octet string longer than its
+  field (up to 255 characters). What this library sends stays within the spec.
 - Encodings: the GSM 7-bit alphabet with its extension table (unpacked, as SMPP carries it, and packed with fill
   bits), ISO-8859-1 and UCS-2 (UTF-16BE, surrogate pairs counted as two units). `DataCoding::bestFor()` picks GSM
   when it holds the text, else UCS-2, or Latin-1 when allowed.
