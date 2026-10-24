@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace CoolMS\Smpp\Tests\Unit;
 
+use Closure;
 use CoolMS\Smpp\Exception\BindFailed;
 use CoolMS\Smpp\Exception\ConnectionClosed;
 use CoolMS\Smpp\Exception\MalformedPdu;
@@ -229,6 +230,78 @@ final class ReviewFixesTest extends TestCase
         $session->submit(new ShortMessage('a', '4', 'x'));
 
         self::assertLessThan(2.0, $this->smsc->clock->now() - $before, 'three throttles in one window paused for 1 s, not 8');
+    }
+
+    #[Test]
+    public function aThrottleAnsweredAfterThePauseForARequestSentBeforeItDoesNotStartAnother(): void
+    {
+        $session = $this->bound(new SessionOptions(throttleBackoff: 1.0, maxThrottleBackoff: 30.0));
+        $this->smsc->holdSubmitResponses = true;
+        $first = $session->send(new ShortMessage('a', '1', 'x'));
+        $second = $session->send(new ShortMessage('a', '2', 'x'));
+        $throttled = static fn (int $sequence): Closure => static fn (FakeSmsc $smsc) => $smsc->send(new Pdu(CommandId::SubmitSmResp->value, CommandStatus::Throttled->value, $sequence));
+        $this->smsc->then($throttled($first));
+        $session->poll(0.1);
+        $session->poll(1.5);
+        $this->smsc->then($throttled($second));
+        $session->poll(0.1);
+        $this->smsc->holdSubmitResponses = false;
+        $before = $this->smsc->clock->now();
+        $session->submit(new ShortMessage('a', '3', 'x'));
+
+        self::assertLessThan(0.5, $this->smsc->clock->now() - $before, 'the late throttle belonged to the pause that had ended');
+    }
+
+    #[Test]
+    public function aResponseAnsweredTwiceGivesOneResult(): void
+    {
+        $session = $this->bound();
+        $result = $session->submit(new ShortMessage('a', '1', 'x'));
+        $this->smsc->then(static fn (FakeSmsc $smsc) => $smsc->send(new Pdu(CommandId::SubmitSmResp->value, 0, $result->sequence, MessageIdResp::forResponse('again'))));
+
+        self::assertSame([], $session->poll(1.0));
+    }
+
+    #[Test]
+    public function aSessionWriteThatTimesOutEndsTheSession(): void
+    {
+        $pair = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
+        if (false === $pair) {
+            throw new RuntimeException('no socket pair');
+        }
+        [$client] = $pair;
+        stream_set_blocking($client, false);
+        while (fwrite($client, str_repeat('x', 65536)) > 0) {
+            // Fill the send buffer: nobody reads the other end.
+        }
+        $clock = new FakeClock();
+        $waiter = new class($clock) implements Waiter {
+            public function __construct(private FakeClock $clock)
+            {
+            }
+
+            public function readable(mixed $stream, float $seconds): bool
+            {
+                $this->clock->advance($seconds);
+
+                return false;
+            }
+
+            public function writable(mixed $stream, float $seconds): bool
+            {
+                $this->clock->advance($seconds);
+
+                return false;
+            }
+        };
+        $session = new Session(new Connection($client, $waiter, $clock, writeTimeout: 5.0), $clock);
+        try {
+            $session->bind(BindMode::Transmitter, new Bind('esme', 'secret'));
+            self::fail('a write the SMSC never reads went unnoticed');
+        } catch (TimedOut) {
+            self::assertFalse($session->isBound());
+        }
+        self::assertSame([], $session->poll(1.0), 'the ended session still answers poll, without throwing');
     }
 
     #[Test]
