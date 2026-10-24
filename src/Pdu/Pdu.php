@@ -10,7 +10,6 @@ use function pack;
 use function sprintf;
 use function strlen;
 use function substr;
-use function unpack;
 
 /**
  * One SMPP PDU: the 16-byte header (command_length, command_id, command_status, sequence_number; section 3.2) and the
@@ -40,6 +39,24 @@ final readonly class Pdu
         return new self($id->value, CommandStatus::Ok->value, $sequence, $body);
     }
 
+    /**
+     * One whole PDU, as framed by its command_length. $bytes must be exactly that long; the transport reads the
+     * length first and refuses one above its limit before reading the rest.
+     */
+    public static function decode(string $bytes): self
+    {
+        if (strlen($bytes) < self::HEADER_LENGTH) {
+            throw new MalformedPdu('A PDU is at least 16 bytes; this one is ' . strlen($bytes) . '.');
+        }
+        $header = new Reader(substr($bytes, 0, self::HEADER_LENGTH));
+        $length = $header->uint32('command_length');
+        if ($length !== strlen($bytes)) {
+            throw new MalformedPdu('command_length says ' . $length . ' bytes; ' . strlen($bytes) . ' were given.');
+        }
+
+        return new self($header->uint32('command_id'), $header->uint32('command_status'), $header->uint32('sequence_number'), substr($bytes, self::HEADER_LENGTH));
+    }
+
     /** The response to this request, with the same sequence number. */
     public function respond(int $status = 0, string $body = ''): self
     {
@@ -65,24 +82,6 @@ final readonly class Pdu
     public function encode(): string
     {
         return pack('NNNN', self::HEADER_LENGTH + strlen($this->body), $this->commandId, $this->status, $this->sequence) . $this->body;
-    }
-
-    /**
-     * One whole PDU, as framed by its command_length. $bytes must be exactly that long; the transport reads the
-     * length first and refuses one above its limit before reading the rest.
-     */
-    public static function decode(string $bytes): self
-    {
-        if (strlen($bytes) < self::HEADER_LENGTH) {
-            throw new MalformedPdu('A PDU is at least 16 bytes; this one is ' . strlen($bytes) . '.');
-        }
-        /** @var array{length: int, id: int, status: int, sequence: int} $header */
-        $header = unpack('Nlength/Nid/Nstatus/Nsequence', $bytes);
-        if ($header['length'] !== strlen($bytes)) {
-            throw new MalformedPdu('command_length says ' . $header['length'] . ' bytes; ' . strlen($bytes) . ' were given.');
-        }
-
-        return new self($header['id'], $header['status'], $header['sequence'], substr($bytes, self::HEADER_LENGTH));
     }
 
     public function describe(): string

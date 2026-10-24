@@ -21,22 +21,6 @@ use PHPUnit\Framework\TestCase;
  */
 final class DeliveryReceiptTest extends TestCase
 {
-    #[Test]
-    public function theAppendixBFormatReadsInFull(): void
-    {
-        $receipt = self::receipt('id:0123456789 sub:001 dlvrd:001 submit date:2310241530 done date:2310241531 stat:DELIVRD err:000 text:Hello there');
-
-        self::assertNotNull($receipt);
-        self::assertSame('0123456789', $receipt->messageId);
-        self::assertSame(MessageState::Delivered, $receipt->state);
-        self::assertSame(1, $receipt->submitted);
-        self::assertSame(1, $receipt->delivered);
-        self::assertSame('2023-10-24 15:30', $receipt->submitDate?->format('Y-m-d H:i'));
-        self::assertSame('2023-10-24 15:31', $receipt->doneDate?->format('Y-m-d H:i'));
-        self::assertSame('000', $receipt->error);
-        self::assertSame('Hello there', $receipt->text);
-    }
-
     /** @return iterable<string, array{string, string, MessageState}> */
     public static function variations(): iterable
     {
@@ -51,6 +35,22 @@ final class DeliveryReceiptTest extends TestCase
         yield 'uuid id' => ['id:3f1c9a2e-7b4d-4c1e-9f0a-2b6d8e4c1a77 stat:DELIVRD', '3f1c9a2e-7b4d-4c1e-9f0a-2b6d8e4c1a77', MessageState::Delivered];
         yield 'unknown state word' => ['id:9 stat:WEIRD', '9', MessageState::Unknown];
         yield 'extra spaces' => ['id: 55  sub:001   stat: DELIVRD', '55', MessageState::Delivered];
+    }
+
+    #[Test]
+    public function theAppendixBFormatReadsInFull(): void
+    {
+        $receipt = self::receipt('id:0123456789 sub:001 dlvrd:001 submit date:2310241530 done date:2310241531 stat:DELIVRD err:000 text:Hello there');
+
+        self::assertNotNull($receipt);
+        self::assertSame('0123456789', $receipt->messageId);
+        self::assertSame(MessageState::Delivered, $receipt->state);
+        self::assertSame(1, $receipt->submitted);
+        self::assertSame(1, $receipt->delivered);
+        self::assertSame('2023-10-24 15:30', $receipt->submitDate?->format('Y-m-d H:i'));
+        self::assertSame('2023-10-24 15:31', $receipt->doneDate?->format('Y-m-d H:i'));
+        self::assertSame('000', $receipt->error);
+        self::assertSame('Hello there', $receipt->text);
     }
 
     #[Test]

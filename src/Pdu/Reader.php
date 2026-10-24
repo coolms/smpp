@@ -6,6 +6,7 @@ namespace CoolMS\Smpp\Pdu;
 
 use CoolMS\Smpp\Exception\MalformedPdu;
 
+use function is_int;
 use function ord;
 use function strlen;
 use function strpos;
@@ -25,6 +26,17 @@ final class Reader
     {
     }
 
+    /** One big-endian unsigned integer: 'n' for 16 bits, 'N' for 32. */
+    public static function unsigned(string $format, string $bytes, string $field): int
+    {
+        $value = unpack($format, $bytes);
+        if (false === $value || !is_int($value[1] ?? null)) {
+            throw new MalformedPdu($field . ' is not a ' . ('n' === $format ? '16' : '32') . '-bit integer.');
+        }
+
+        return $value[1];
+    }
+
     public function uint8(string $field): int
     {
         return ord($this->take(1, $field));
@@ -32,12 +44,12 @@ final class Reader
 
     public function uint16(string $field): int
     {
-        return (int) unpack('n', $this->take(2, $field))[1];
+        return self::unsigned('n', $this->take(2, $field), $field);
     }
 
     public function uint32(string $field): int
     {
-        return (int) unpack('N', $this->take(4, $field))[1];
+        return self::unsigned('N', $this->take(4, $field), $field);
     }
 
     /** A C-octet string of at most $max bytes including its NUL. */

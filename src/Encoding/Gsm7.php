@@ -42,10 +42,10 @@ final class Gsm7
         0x3C => '[', 0x3D => '~', 0x3E => ']', 0x40 => '|', 0x65 => '€',
     ];
 
-    /** @var array<string, int>|null */
+    /** @var array<string, int<0, 127>>|null */
     private static ?array $basicIndex = null;
 
-    /** @var array<string, int>|null */
+    /** @var array<string, int<0, 127>>|null */
     private static ?array $extensionIndex = null;
 
     public static function canEncode(string $text): bool
@@ -153,9 +153,9 @@ final class Gsm7
     }
 
     /**
-     * @param array<int, string> $table
+     * @param array<int<0, 127>, string> $table
      *
-     * @return array<string, int>
+     * @return array<string, int<0, 127>>
      */
     private static function index(array $table): array
     {

@@ -136,7 +136,7 @@ final class PduTest extends TestCase
     #[Test]
     public function aBodyWithoutItsNulOrRunningShortIsRefused(): void
     {
-        foreach (["abc", "abc\0pw\0", "abc\0pw\0\0\x34\x01"] as $body) {
+        foreach (['abc', "abc\0pw\0", "abc\0pw\0\0\x34\x01"] as $body) {
             try {
                 Bind::decode($body);
                 self::fail('read a truncated bind: ' . bin2hex($body));

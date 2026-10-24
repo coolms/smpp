@@ -22,7 +22,7 @@ final class EncodingTest extends TestCase
     public function gsm7MapsTheBasicTableOneSeptetPerCharacter(): void
     {
         // '@' 0x00, '£' 0x01, '¡' 0x40, 'A' 0x41, 'Δ' 0x10, 'ß' 0x1E, 'à' 0x7F, '\n' 0x0A.
-        self::assertSame('0001404110' . '1e7f0a', bin2hex(Gsm7::encode("@£¡AΔßà\n")));
+        self::assertSame('00014041101e7f0a', bin2hex(Gsm7::encode("@£¡AΔßà\n")));
     }
 
     #[Test]

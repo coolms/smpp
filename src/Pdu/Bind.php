@@ -26,19 +26,6 @@ final readonly class Bind
     ) {
     }
 
-    public function encode(): string
-    {
-        return new Writer()
-            ->cString($this->systemId, 16, 'system_id')
-            ->cString($this->password, 9, 'password')
-            ->cString($this->systemType, 13, 'system_type')
-            ->uint8($this->interfaceVersion, 'interface_version')
-            ->uint8($this->addressTon, 'addr_ton')
-            ->uint8($this->addressNpi, 'addr_npi')
-            ->cString($this->addressRange, 41, 'address_range')
-            ->bytes();
-    }
-
     /** An SMSC-side read, for tests and simulators; the password is checked with passwordIs(), never returned. */
     public static function decode(string $body): self
     {
@@ -53,6 +40,19 @@ final readonly class Bind
             $reader->uint8('addr_npi'),
             $reader->cString('address_range', 41),
         );
+    }
+
+    public function encode(): string
+    {
+        return new Writer()
+            ->cString($this->systemId, 16, 'system_id')
+            ->secret($this->password, 9, 'password')
+            ->cString($this->systemType, 13, 'system_type')
+            ->uint8($this->interfaceVersion, 'interface_version')
+            ->uint8($this->addressTon, 'addr_ton')
+            ->uint8($this->addressNpi, 'addr_npi')
+            ->cString($this->addressRange, 41, 'address_range')
+            ->bytes();
     }
 
     public function passwordIs(#[SensitiveParameter] string $password): bool

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace CoolMS\Smpp\Pdu;
 
 use CoolMS\Smpp\Exception\MalformedPdu;
+use SensitiveParameter;
 
 use function chr;
 use function pack;
@@ -54,6 +55,17 @@ final class Writer
         }
         if (strlen($value) + 1 > $max) {
             throw new MalformedPdu($field . ' holds at most ' . ($max - 1) . ' characters; "' . $value . '" has ' . strlen($value) . '.');
+        }
+        $this->bytes .= $value . "\0";
+
+        return $this;
+    }
+
+    /** As cString, for a password: never named in an error or a stack trace. */
+    public function secret(#[SensitiveParameter] string $value, int $max, string $field): self
+    {
+        if (str_contains($value, "\0") || strlen($value) + 1 > $max) {
+            throw new MalformedPdu($field . ' holds at most ' . ($max - 1) . ' characters and no NUL byte.');
         }
         $this->bytes .= $value . "\0";
 

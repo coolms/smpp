@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace CoolMS\Smpp\Pdu;
 
+use function in_array;
 use function sprintf;
 
 /**
@@ -68,7 +69,7 @@ enum CommandStatus: int
      */
     public static function isTransient(int $status): bool
     {
-        return \in_array(self::tryFrom($status), [self::Throttled, self::MessageQueueFull, self::TemporaryAppError], true);
+        return in_array(self::tryFrom($status), [self::Throttled, self::MessageQueueFull, self::TemporaryAppError], true);
     }
 
     /** "ESME_RTHROTTLED (0x00000058)", or "0x00000401" for a code SMPP 3.4 does not define. */

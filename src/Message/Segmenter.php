@@ -77,6 +77,15 @@ final readonly class Segmenter
         return Concatenation::Payload === $this->concatenation ? 1 : count($this->split($text, $coding));
     }
 
+    private static function octet(int $value): string
+    {
+        if ($value < 0 || $value > 0xFF) {
+            throw new MalformedPdu('A UDH field is one octet; ' . $value . ' does not fit.');
+        }
+
+        return chr($value);
+    }
+
     /** The short_message bytes a part holds after a $header-octet UDH, in this coding's units. */
     private function capacity(DataCoding $coding, int $header): int
     {
@@ -129,7 +138,7 @@ final readonly class Segmenter
     private function header(int $reference, int $total, int $sequence): string
     {
         return Concatenation::Udh16 === $this->concatenation
-            ? "\x06\x08\x04" . pack('n', $reference) . chr($total) . chr($sequence)
-            : "\x05\x00\x03" . chr($reference) . chr($total) . chr($sequence);
+            ? "\x06\x08\x04" . pack('n', $reference) . self::octet($total) . self::octet($sequence)
+            : "\x05\x00\x03" . self::octet($reference) . self::octet($total) . self::octet($sequence);
     }
 }

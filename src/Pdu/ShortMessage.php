@@ -20,11 +20,14 @@ final readonly class ShortMessage
 
     /** esm_class bits 2-5 on a deliver_sm: what kind of message it is (section 5.2.12). */
     public const int ESM_TYPE_MASK = 0x3C;
+
     public const int ESM_TYPE_DELIVERY_RECEIPT = 0x04;
+
     public const int ESM_TYPE_INTERMEDIATE_NOTIFICATION = 0x20;
 
     /** registered_delivery bits 0-1: ask for a receipt on final success or failure (01) or on failure only (10). */
     public const int RECEIPT_ON_FINAL = 0x01;
+
     public const int RECEIPT_ON_FAILURE = 0x02;
 
     public const int MAX_SHORT_MESSAGE = 254;
@@ -53,31 +56,6 @@ final readonly class ShortMessage
         if (strlen($shortMessage) > self::MAX_SHORT_MESSAGE) {
             throw new MalformedPdu('short_message holds at most 254 octets; use message_payload or segments for ' . strlen($shortMessage) . '.');
         }
-    }
-
-    public function encode(): string
-    {
-        return new Writer()
-            ->cString($this->serviceType, 6, 'service_type')
-            ->uint8($this->sourceTon, 'source_addr_ton')
-            ->uint8($this->sourceNpi, 'source_addr_npi')
-            ->cString($this->sourceAddr, 21, 'source_addr')
-            ->uint8($this->destinationTon, 'dest_addr_ton')
-            ->uint8($this->destinationNpi, 'dest_addr_npi')
-            ->cString($this->destinationAddr, 21, 'destination_addr')
-            ->uint8($this->esmClass, 'esm_class')
-            ->uint8($this->protocolId, 'protocol_id')
-            ->uint8($this->priority, 'priority_flag')
-            ->cString($this->scheduleDeliveryTime, 17, 'schedule_delivery_time')
-            ->cString($this->validityPeriod, 17, 'validity_period')
-            ->uint8($this->registeredDelivery, 'registered_delivery')
-            ->uint8($this->replaceIfPresent, 'replace_if_present_flag')
-            ->uint8($this->dataCoding, 'data_coding')
-            ->uint8($this->smDefaultMsgId, 'sm_default_msg_id')
-            ->uint8(strlen($this->shortMessage), 'sm_length')
-            ->octets($this->shortMessage)
-            ->tlvs($this->tlvs)
-            ->bytes();
     }
 
     public static function decode(string $body): self
@@ -121,6 +99,31 @@ final readonly class ShortMessage
             $default,
             $r->tlvs(),
         );
+    }
+
+    public function encode(): string
+    {
+        return new Writer()
+            ->cString($this->serviceType, 6, 'service_type')
+            ->uint8($this->sourceTon, 'source_addr_ton')
+            ->uint8($this->sourceNpi, 'source_addr_npi')
+            ->cString($this->sourceAddr, 21, 'source_addr')
+            ->uint8($this->destinationTon, 'dest_addr_ton')
+            ->uint8($this->destinationNpi, 'dest_addr_npi')
+            ->cString($this->destinationAddr, 21, 'destination_addr')
+            ->uint8($this->esmClass, 'esm_class')
+            ->uint8($this->protocolId, 'protocol_id')
+            ->uint8($this->priority, 'priority_flag')
+            ->cString($this->scheduleDeliveryTime, 17, 'schedule_delivery_time')
+            ->cString($this->validityPeriod, 17, 'validity_period')
+            ->uint8($this->registeredDelivery, 'registered_delivery')
+            ->uint8($this->replaceIfPresent, 'replace_if_present_flag')
+            ->uint8($this->dataCoding, 'data_coding')
+            ->uint8($this->smDefaultMsgId, 'sm_default_msg_id')
+            ->uint8(strlen($this->shortMessage), 'sm_length')
+            ->octets($this->shortMessage)
+            ->tlvs($this->tlvs)
+            ->bytes();
     }
 
     public function tlv(Tag $tag): ?Tlv

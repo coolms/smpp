@@ -10,7 +10,6 @@ use function chr;
 use function ord;
 use function pack;
 use function strlen;
-use function unpack;
 
 /** One optional parameter: a 16-bit tag, a 16-bit length and that many bytes of value (section 5.3.1). */
 final readonly class Tlv
@@ -63,8 +62,8 @@ final readonly class Tlv
     {
         return match (strlen($this->value)) {
             1 => ord($this->value),
-            2 => (int) unpack('n', $this->value)[1],
-            4 => (int) unpack('N', $this->value)[1],
+            2 => Reader::unsigned('n', $this->value, 'TLV 0x' . dechex($this->tag)),
+            4 => Reader::unsigned('N', $this->value, 'TLV 0x' . dechex($this->tag)),
             default => throw new MalformedPdu('TLV 0x' . dechex($this->tag) . ' is ' . strlen($this->value) . ' bytes, not an integer.'),
         };
     }
