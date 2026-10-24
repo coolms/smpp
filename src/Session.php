@@ -62,6 +62,7 @@ final class Session
     private ?int $enquireLink = null;
     private float $enquireLinkSentAt = 0.0;
     private float $pausedUntil = 0.0;
+    private float $pauseStartedAt = -INF;
     private float $backoff;
 
     /** @var (Closure(ShortMessage, ?DeliveryReceipt): int)|null */
@@ -356,12 +357,15 @@ final class Session
         if (!isset($this->outstanding[$sequence])) {
             return;
         }
+        $sentAt = $this->outstanding[$sequence] - $this->options->responseTimeout;
         unset($this->outstanding[$sequence]);
         $this->completed[] = new SubmitResult($sequence, $status, $messageId);
         if (CommandStatus::Throttled->value === $status || CommandStatus::MessageQueueFull->value === $status) {
-            // One pause per episode: throttles answered while a pause runs belong to it and do not lengthen it.
+            // One pause per episode: a throttle for a request sent before the last pause began belongs to that
+            // pause, whenever it is answered, and so does one answered while a pause runs.
             $now = $this->clock->now();
-            if ($now >= $this->pausedUntil) {
+            if ($sentAt > $this->pauseStartedAt && $now >= $this->pausedUntil) {
+                $this->pauseStartedAt = $now;
                 $this->pausedUntil = $now + $this->backoff;
                 $this->backoff = min($this->backoff * 2, $this->options->maxThrottleBackoff);
             }
