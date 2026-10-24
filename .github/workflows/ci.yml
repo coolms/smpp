@@ -55,8 +55,8 @@ jobs:
       - name: Unit tests
         run: vendor/bin/phpunit --testdox
 
-  zero-dependency:
-    name: No runtime dependencies
+  runtime-dependencies:
+    name: Runtime dependencies are the two polyfills
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -68,16 +68,16 @@ jobs:
       - name: Install runtime dependencies only
         run: composer update --no-dev --prefer-dist --no-interaction --no-progress
 
-      # The README promises zero dependencies; assert it rather than trust it.
-      - name: Assert nothing was installed
+      # The README names exactly two runtime dependencies; assert it rather than trust it.
+      - name: Assert only the two polyfills were installed
         run: |
-          installed=$(composer show --no-dev --name-only 2>/dev/null || true)
-          if [ -n "$installed" ]; then
-            echo "::error::coolms/smpp has no runtime dependencies; these were installed:"
-            echo "$installed"
+          installed=$(composer show --no-dev --name-only 2>/dev/null | sort | tr '\n' ' ' | sed 's/ $//')
+          expected="symfony/polyfill-io-poll symfony/polyfill-time"
+          if [ "$installed" != "$expected" ]; then
+            echo "::error::coolms/smpp's runtime dependencies are $expected; installed: $installed"
             exit 1
           fi
-          echo "confirmed: no runtime dependencies"
+          echo "confirmed: $installed"
 
   static:
     name: PHPStan (level 8) and code style

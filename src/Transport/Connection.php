@@ -43,7 +43,7 @@ final class Connection
      */
     public function __construct(
         private readonly mixed $stream,
-        private readonly Waiter $waiter = new StreamSelectWaiter(),
+        private readonly Waiter $waiter = new IoPollWaiter(),
         private readonly Clock $clock = new MonotonicClock(),
         private readonly int $maxLength = self::DEFAULT_MAX_LENGTH,
         private readonly float $writeTimeout = 10.0,
