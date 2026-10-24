@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  # Weekly, so a break from a dependency or a PHP point release shows up on a Monday rather than inside someone's
+  # pull request.
+  schedule:
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # 8.5 is the floor: the sources use typed class constants and `new` without parentheses in an expression.
+        php: ['8.5']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          # PHPUnit's extensions (dom ... xmlwriter), this library's own (mbstring), Composer's (curl, phar).
+          # Kept narrow so a future dependency on an extension not declared fails here.
+          extensions: none, ctype, dom, filter, json, libxml, mbstring, openssl, tokenizer, xml, xmlwriter, curl, phar
+
+      - name: Validate composer.json
+        run: composer validate --strict
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache
+          key: composer-${{ matrix.php }}-${{ hashFiles('composer.json') }}
+          restore-keys: composer-${{ matrix.php }}-
+
+      # No composer.lock (a library), so this resolves fresh every run.
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction --no-progress
+
+      - name: Lint sources
+        run: find src tests -name '*.php' -print0 | xargs -0 -n1 -P4 php -l
+
+      - name: Unit tests
+        run: vendor/bin/phpunit --testdox
+
+  zero-dependency:
+    name: No runtime dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+
+      - name: Install runtime dependencies only
+        run: composer update --no-dev --prefer-dist --no-interaction --no-progress
+
+      # The README promises zero dependencies; assert it rather than trust it.
+      - name: Assert nothing was installed
+        run: |
+          installed=$(composer show --no-dev --name-only 2>/dev/null || true)
+          if [ -n "$installed" ]; then
+            echo "::error::coolms/smpp has no runtime dependencies; these were installed:"
+            echo "$installed"
+            exit 1
+          fi
+          echo "confirmed: no runtime dependencies"
+
+  static:
+    name: PHPStan (level 8) and code style
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+          tools: phpstan:2.3.1, php-cs-fixer:3.95.27
+
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction --no-progress
+
+      - name: PHPStan
+        run: phpstan analyse --no-progress --memory-limit=1G
+
+      # A dry run: the check reports the drift and fails; it never rewrites a file.
+      - name: Code style
+        run: php-cs-fixer fix --dry-run --diff
