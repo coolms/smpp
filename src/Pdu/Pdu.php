@@ -20,7 +20,6 @@ final readonly class Pdu
 {
     public const int HEADER_LENGTH = 16;
 
-    /** A sequence number is 1 to 0x7FFFFFFF (section 3.2). */
     /** The largest sequence number this library gives a request (section 3.2: 0x00000001 to 0x7FFFFFFF). */
     public const int MAX_SEQUENCE = 0x7FFFFFFF;
 

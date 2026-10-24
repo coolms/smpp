@@ -56,7 +56,6 @@ final class Reader
         return self::unsigned('N', $this->take(4, $field), $field);
     }
 
-    /** A C-octet string of at most $max bytes including its NUL. */
     /**
      * A C-octet string, up to its NUL. `$max` is the field's length in SMPP 3.4, and a longer value is read anyway: an
      * SMSC that writes a seven-character service_type still sent a receipt. Only a value past {@see LENIENT_MAX} is
