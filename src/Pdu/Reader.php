@@ -1,0 +1,94 @@
+<?php
+
+declare(strict_types=1);
+
+namespace CoolMS\Smpp\Pdu;
+
+use CoolMS\Smpp\Exception\MalformedPdu;
+
+use function ord;
+use function strlen;
+use function strpos;
+use function substr;
+use function unpack;
+
+/**
+ * Reads a PDU body field by field. Every read checks the bytes are there, and a C-octet string its NUL and its field's
+ * maximum (section 3.1: the maximum counts the NUL), so a short or hostile body ends in MalformedPdu, never in a
+ * misread.
+ */
+final class Reader
+{
+    private int $at = 0;
+
+    public function __construct(private readonly string $bytes)
+    {
+    }
+
+    public function uint8(string $field): int
+    {
+        return ord($this->take(1, $field));
+    }
+
+    public function uint16(string $field): int
+    {
+        return (int) unpack('n', $this->take(2, $field))[1];
+    }
+
+    public function uint32(string $field): int
+    {
+        return (int) unpack('N', $this->take(4, $field))[1];
+    }
+
+    /** A C-octet string of at most $max bytes including its NUL. */
+    public function cString(string $field, int $max): string
+    {
+        $nul = strpos($this->bytes, "\0", $this->at);
+        if (false === $nul) {
+            throw new MalformedPdu($field . ' has no terminating NUL.');
+        }
+        $length = $nul - $this->at;
+        if ($length + 1 > $max) {
+            throw new MalformedPdu($field . ' is ' . ($length + 1) . ' bytes with its NUL; at most ' . $max . ' are allowed.');
+        }
+        $value = substr($this->bytes, $this->at, $length);
+        $this->at = $nul + 1;
+
+        return $value;
+    }
+
+    /** An octet string whose length was given by an earlier field. */
+    public function octets(int $length, string $field): string
+    {
+        return 0 === $length ? '' : $this->take($length, $field);
+    }
+
+    /** @return list<Tlv> every TLV up to the end of the body */
+    public function tlvs(): array
+    {
+        $tlvs = [];
+        while (!$this->done()) {
+            $tag = $this->uint16('a TLV tag');
+            $length = $this->uint16('a TLV length');
+            $tlvs[] = new Tlv($tag, $this->octets($length, 'TLV 0x' . dechex($tag)));
+        }
+
+        return $tlvs;
+    }
+
+    public function done(): bool
+    {
+        return $this->at >= strlen($this->bytes);
+    }
+
+    private function take(int $length, string $field): string
+    {
+        if ($this->at + $length > strlen($this->bytes)) {
+            throw new MalformedPdu($field . ' runs past the end of the PDU.');
+        }
+        $value = substr($this->bytes, $this->at, $length);
+        $this->at += $length;
+
+        return $value;
+    }
+}

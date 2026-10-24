@@ -1,0 +1,43 @@
+{
+    "name": "coolms/smpp",
+    "description": "An SMPP 3.4 client for PHP: binds, submit_sm and deliver_sm with a window of outstanding requests, GSM 03.38, Latin-1 and UCS-2, long messages by UDH or message_payload, and delivery receipts read the way real SMSCs write them. Zero dependencies.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": ["smpp", "sms", "smsc", "esme", "gsm", "delivery-receipt"],
+    "authors": [
+        {
+            "name": "Dmitry Popov",
+            "email": "d.popov@altgraphic.com"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/coolms/smpp/issues",
+        "source": "https://github.com/coolms/smpp"
+    },
+    "require": {
+        "php": "^8.5",
+        "ext-mbstring": "*"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^12.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "CoolMS\\Smpp\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "CoolMS\\Smpp\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit"
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-develop": "0.1.x-dev"
+        }
+    },
+    "minimum-stability": "stable"
+}
