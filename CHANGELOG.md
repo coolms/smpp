@@ -5,7 +5,7 @@ All notable changes to `coolms/smpp` are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/). Before 1.0.0, a minor version may break the API.
 
-## Unreleased
+## 0.1.0-alpha.1
 
 ### Added
 
