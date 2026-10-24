@@ -20,6 +20,7 @@ use function array_shift;
 use function count;
 use function fread;
 use function fwrite;
+use function is_resource;
 use function stream_select;
 use function stream_set_blocking;
 use function stream_socket_pair;
@@ -95,6 +96,31 @@ final class FakeSmsc implements Waiter
         return $this->pending($stream);
     }
 
+    public function writable(mixed $stream, float $seconds): bool
+    {
+        return true;
+    }
+
+    /** The SMSC drops the connection. */
+    public function hangUp(): void
+    {
+        fclose($this->server);
+    }
+
+    /** Bytes as they are, framed or not. */
+    public function raw(string $bytes): void
+    {
+        fwrite($this->server, $bytes);
+    }
+
+    /** Whether the client has closed its end. */
+    public function peerClosed(): bool
+    {
+        $this->serve();
+
+        return feof($this->server);
+    }
+
     /** Runs once at the SMSC's next turn: a deliver_sm to push, an unbind to send. */
     public function then(Closure $step): void
     {
@@ -138,6 +164,9 @@ final class FakeSmsc implements Waiter
 
     private function serve(): void
     {
+        if (!is_resource($this->server)) {
+            return;
+        }
         while ('' !== ($chunk = (string) fread($this->server, 65536))) {
             $this->buffer .= $chunk;
         }

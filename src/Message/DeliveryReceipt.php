@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace CoolMS\Smpp\Message;
 
 use CoolMS\Smpp\Encoding\DataCoding;
+use CoolMS\Smpp\Encoding\Latin1;
+use CoolMS\Smpp\Encoding\Ucs2;
 use CoolMS\Smpp\Exception\MalformedPdu;
 use CoolMS\Smpp\Pdu\ShortMessage;
 use CoolMS\Smpp\Pdu\Tag;
@@ -48,21 +50,14 @@ final readonly class DeliveryReceipt
             return null;
         }
         $zone ??= new DateTimeZone('UTC');
-        try {
-            $text = DataCoding::fromByte($deliverSm->dataCoding)->decode($deliverSm->payload());
-        } catch (MalformedPdu) {
-            $text = '';
-        }
+        $text = self::text($deliverSm);
         $head = 1 === preg_match('/^(.*?)\btext:(.*)$/is', $text, $split) ? $split[1] : $text;
         $tlvId = $deliverSm->tlv(Tag::ReceiptedMessageId)?->asString();
         $id = null !== $tlvId && '' !== $tlvId ? $tlvId : self::field($head, 'id', '\S+');
         if (null === $id || '' === $id) {
             return null;
         }
-        $stateTlv = $deliverSm->tlv(Tag::MessageState);
-        $state = null !== $stateTlv
-            ? (MessageState::tryFrom($stateTlv->asInt()) ?? MessageState::Unknown)
-            : MessageState::fromText(self::field($head, 'stat', '[A-Za-z_]+') ?? '');
+        $state = self::stateFromTlv($deliverSm) ?? MessageState::fromText(self::field($head, 'stat', '[A-Za-z_]+') ?? '');
         $submitted = self::field($head, 'sub', '\d+');
         $delivered = self::field($head, 'dlvrd', '\d+');
 
@@ -71,12 +66,44 @@ final readonly class DeliveryReceipt
             $state,
             null === $submitted ? null : (int) $submitted,
             null === $delivered ? null : (int) $delivered,
-            self::date(self::field($head, 'submit[ _]?date', '\d{10}(?:\d{2})?'), $zone),
-            self::date(self::field($head, 'done[ _]?date', '\d{10}(?:\d{2})?'), $zone),
+            self::date(self::field($head, 'submit[ _]?date', '\d{10}(?:\d{2}(?:\d{2})?)?'), $zone),
+            self::date(self::field($head, 'done[ _]?date', '\d{10}(?:\d{2}(?:\d{2})?)?'), $zone),
             self::field($head, 'err', '\w+'),
             self::networkError($deliverSm),
             trim($split[2] ?? ''),
         );
+    }
+
+    /**
+     * The receipt's text. Appendix B text is ASCII, and SMSCs send it under data_coding 0 as plain bytes, not as
+     * GSM 03.38 septets -- read that way, "_", "$" and "@" would turn into other characters and ids would stop
+     * matching. So data_coding 0 (and 1, and anything not text-bearing) reads as bytes; UCS-2 and Latin-1 as such.
+     */
+    private static function text(ShortMessage $deliverSm): string
+    {
+        $raw = $deliverSm->payload();
+        try {
+            return match (DataCoding::fromByte($deliverSm->dataCoding)) {
+                DataCoding::Ucs2 => Ucs2::decode($raw),
+                default => Latin1::decode($raw),
+            };
+        } catch (MalformedPdu) {
+            return Latin1::decode($raw);
+        }
+    }
+
+    /** The message_state TLV's state, or null when it is absent or not a one-byte value (the text decides then). */
+    private static function stateFromTlv(ShortMessage $deliverSm): ?MessageState
+    {
+        $tlv = $deliverSm->tlv(Tag::MessageState);
+        if (null === $tlv) {
+            return null;
+        }
+        try {
+            return MessageState::tryFrom($tlv->asInt()) ?? MessageState::Unknown;
+        } catch (MalformedPdu) {
+            return null;
+        }
     }
 
     private static function field(string $text, string $key, string $value): ?string
@@ -89,7 +116,12 @@ final readonly class DeliveryReceipt
         if (null === $digits) {
             return null;
         }
-        $format = 12 === strlen($digits) ? 'ymdHis' : 'ymdHi';
+        // 10 digits: YYMMDDhhmm (Appendix B); 12: with seconds; 14: a four-digit year with seconds, as some SMSCs write.
+        $format = match (strlen($digits)) {
+            14 => 'YmdHis',
+            12 => 'ymdHis',
+            default => 'ymdHi',
+        };
         $date = DateTimeImmutable::createFromFormat('!' . $format, $digits, $zone);
 
         // createFromFormat rolls "month 99" over into a later year; a date that does not print back is not a date.

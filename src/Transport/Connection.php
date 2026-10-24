@@ -6,9 +6,11 @@ namespace CoolMS\Smpp\Transport;
 
 use CoolMS\Smpp\Exception\ConnectionClosed;
 use CoolMS\Smpp\Exception\MalformedPdu;
+use CoolMS\Smpp\Exception\TimedOut;
 use CoolMS\Smpp\Pdu\Pdu;
 use CoolMS\Smpp\Pdu\Reader;
 
+use function fclose;
 use function feof;
 use function fread;
 use function fwrite;
@@ -20,7 +22,9 @@ use function substr;
 
 /**
  * PDUs over one stream: framed by command_length, which is checked against the limit before the body is read, so a
- * peer cannot make the client buffer what it declares. Reads never block: the Waiter waits.
+ * peer cannot make the client buffer what it declares. Reads and writes never block; the Waiter waits, with a
+ * deadline both ways. On end of stream or a framing error the stream is closed: nothing after a bad frame can be
+ * trusted to start on a PDU boundary.
  */
 final class Connection
 {
@@ -28,6 +32,9 @@ final class Connection
     public const int DEFAULT_MAX_LENGTH = 70_000;
 
     private string $buffer = '';
+
+    /** The peer has closed: what is buffered is still handed out, then the connection ends. */
+    private bool $ended = false;
 
     /**
      * @param resource $stream
@@ -37,6 +44,7 @@ final class Connection
         private readonly Waiter $waiter = new StreamSelectWaiter(),
         private readonly Clock $clock = new MonotonicClock(),
         private readonly int $maxLength = self::DEFAULT_MAX_LENGTH,
+        private readonly float $writeTimeout = 10.0,
     ) {
         stream_set_blocking($stream, false);
     }
@@ -44,14 +52,22 @@ final class Connection
     public function write(Pdu $pdu): void
     {
         $bytes = $pdu->encode();
+        $deadline = $this->clock->now() + $this->writeTimeout;
         while ('' !== $bytes) {
             $written = is_resource($this->stream) ? @fwrite($this->stream, $bytes) : false;
             if (false === $written) {
+                $this->close();
+
                 throw new ConnectionClosed('The connection closed while ' . $pdu->describe() . ' was being sent.');
             }
             if (0 === $written) {
-                // A full send buffer on a non-blocking socket: give the peer a moment rather than spin.
-                $this->waiter->readable($this->stream, 0.001);
+                // The send buffer is full: wait until the SMSC reads, but not past the deadline.
+                $left = $deadline - $this->clock->now();
+                if ($left <= 0 || (!$this->waiter->writable($this->stream, $left) && $this->clock->now() >= $deadline)) {
+                    $this->close();
+
+                    throw new TimedOut('The SMSC did not read ' . $pdu->describe() . ' within ' . $this->writeTimeout . ' s.');
+                }
                 continue;
             }
             $bytes = substr($bytes, $written);
@@ -72,32 +88,50 @@ final class Connection
             if (null !== $pdu) {
                 return $pdu;
             }
+            if ($this->ended) {
+                $this->close();
+
+                throw new ConnectionClosed('The SMSC closed the connection.');
+            }
             $left = $deadline - $this->clock->now();
-            if ($left <= 0 || !$this->waiter->readable($this->stream, max(0.0, $left))) {
-                if ($this->clock->now() >= $deadline) {
-                    return null;
-                }
+            if ($left <= 0 || (!$this->waiter->readable($this->stream, max(0.0, $left)) && $this->clock->now() >= $deadline)) {
+                return null;
             }
         }
     }
 
     public function close(): void
     {
+        $this->buffer = '';
         if (is_resource($this->stream)) {
             fclose($this->stream);
         }
     }
 
+    /**
+     * Everything readable now, not one chunk: a TLS record can leave decrypted bytes inside PHP, where a select on
+     * the socket would not see them.
+     */
     private function fill(): void
     {
+        if ($this->ended) {
+            return;
+        }
         if (!is_resource($this->stream)) {
             throw new ConnectionClosed('The connection is closed.');
         }
-        $chunk = @fread($this->stream, 65536);
-        if (false === $chunk || ('' === $chunk && feof($this->stream))) {
-            throw new ConnectionClosed('The SMSC closed the connection.');
+        while (true) {
+            $chunk = @fread($this->stream, 65536);
+            if (false === $chunk || ('' === $chunk && feof($this->stream))) {
+                $this->ended = true;
+
+                return;
+            }
+            if ('' === $chunk) {
+                return;
+            }
+            $this->buffer .= $chunk;
         }
-        $this->buffer .= $chunk;
     }
 
     private function take(): ?Pdu
@@ -107,7 +141,9 @@ final class Connection
         }
         $length = Reader::unsigned('N', substr($this->buffer, 0, 4), 'command_length');
         if ($length < Pdu::HEADER_LENGTH || $length > $this->maxLength) {
-            throw new MalformedPdu('A PDU declared ' . $length . ' bytes; ' . Pdu::HEADER_LENGTH . ' to ' . $this->maxLength . ' are accepted.');
+            $this->close();
+
+            throw new MalformedPdu('A PDU declared ' . $length . ' bytes; ' . Pdu::HEADER_LENGTH . ' to ' . $this->maxLength . ' are accepted. The connection is closed.');
         }
         if (strlen($this->buffer) < $length) {
             return null;

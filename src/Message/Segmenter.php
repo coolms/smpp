@@ -15,6 +15,7 @@ use function count;
 use function intdiv;
 use function ord;
 use function pack;
+use function random_int;
 use function strlen;
 use function substr;
 
@@ -40,11 +41,12 @@ final readonly class Segmenter
 
     /**
      * @param DataCoding|null $coding    null chooses the best that holds the text
-     * @param int             $reference the concatenation reference all parts share; unique per destination
+     * @param int|null        $reference the concatenation reference all parts share, unique per destination; null
+     *                                   draws one at random, so two long texts to one handset do not collide
      *
      * @return list<Segment>
      */
-    public function split(string $text, ?DataCoding $coding = null, int $reference = 0): array
+    public function split(string $text, ?DataCoding $coding = null, ?int $reference = null): array
     {
         $coding ??= DataCoding::bestFor($text, $this->allowLatin1);
         $encoded = $coding->encode($text);
@@ -55,6 +57,7 @@ final readonly class Segmenter
             return [new Segment('', $coding, 0, [Tlv::of(Tag::MessagePayload, $encoded)])];
         }
         $limit = Concatenation::Udh16 === $this->concatenation ? 0xFFFF : 0xFF;
+        $reference ??= random_int(0, $limit);
         if ($reference < 0 || $reference > $limit) {
             throw new MalformedPdu('A ' . (0xFF === $limit ? '8' : '16') . '-bit concatenation reference is 0 to ' . $limit . '; ' . $reference . ' is not.');
         }

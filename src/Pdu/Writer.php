@@ -54,7 +54,8 @@ final class Writer
             throw new MalformedPdu($field . ' cannot hold a NUL byte.');
         }
         if (strlen($value) + 1 > $max) {
-            throw new MalformedPdu($field . ' holds at most ' . ($max - 1) . ' characters; "' . $value . '" has ' . strlen($value) . '.');
+            // The value is not repeated: it may be an account name or a phone number.
+            throw new MalformedPdu($field . ' holds at most ' . ($max - 1) . ' characters; the value has ' . strlen($value) . '.');
         }
         $this->bytes .= $value . "\0";
 

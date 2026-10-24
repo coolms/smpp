@@ -169,6 +169,11 @@ final class ConnectionTest extends TestCase
 
                 return true;
             }
+
+            public function writable(mixed $stream, float $seconds): bool
+            {
+                return true;
+            }
         };
     }
 }

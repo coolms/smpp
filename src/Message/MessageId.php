@@ -37,12 +37,13 @@ final class MessageId
         return ctype_xdigit($lower) ? ('' === $trimmed ? '0' : $trimmed) : $lower;
     }
 
-    /** $hex read as hexadecimal equals $decimal; only for values that fit 63 bits, so the arithmetic is exact. */
+    /** $hex (with at least one letter) read as hexadecimal equals $decimal; only within 63 bits, so it is exact. */
     private static function hexEqualsDecimal(string $hex, string $decimal): bool
     {
         $hex = ltrim($hex, '0');
         $decimal = ltrim($decimal, '0');
-        if ('' === $hex || '' === $decimal || !ctype_xdigit($hex) || !ctype_digit($decimal) || strlen($hex) > 15 || strlen($decimal) > 18) {
+        // Only when $hex has a letter: two all-digit ids are both "valid hex", and "10" would then equal "16".
+        if ('' === $hex || '' === $decimal || !ctype_xdigit($hex) || ctype_digit($hex) || !ctype_digit($decimal) || strlen($hex) > 15 || strlen($decimal) > 18) {
             return false;
         }
 

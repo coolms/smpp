@@ -19,6 +19,12 @@ final readonly class MessageIdResp
         return new self('' === $body ? '' : new Reader($body)->cString('message_id', 65));
     }
 
+    /** The body of a deliver_sm_resp or data_sm_resp: a message_id, empty for deliver_sm_resp (section 4.6.2). */
+    public static function forResponse(string $messageId): string
+    {
+        return new self($messageId)->encode();
+    }
+
     public function encode(): string
     {
         return new Writer()->cString($this->messageId, 65, 'message_id')->bytes();
